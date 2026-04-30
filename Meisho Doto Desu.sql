@@ -338,3 +338,83 @@ WHERE nv1.manv > nv2.manv AND nv1.honv+ ' ' + nv1.tennv = nv2.honv+ ' ' + nv2.te
 FROM NHAN_VIEN nv1
 JOIN NHAN_VIEN nv2 ON nv1.TenNV = nv2.TenNV AND nv1.HoNV = nv2.HoNV
 WHERE nv1.MaNV > nv2.MaNV;
+
+--r. Danh sách họ tên nhân viên chỉ làm việc cho các công trình mà chi nhánh phụ trách công trình không phải là chi nhánh mà mình trực thuộc.
+SELECT DISTINCT  nv.manv, nv.honv + ' ' + nv.tennv AS hovatennv
+FROM NHAN_VIEN nv, PHAN_CONG pc
+WHERE nv.manv = pc.manv
+  AND nv.manv NOT IN (
+    SELECT nv2.manv
+    FROM NHAN_VIEN nv2, PHAN_CONG pc2, CONG_TRINH ct2
+    WHERE nv2.manv = pc2.manv 
+      AND pc2.mact = ct2.mact 
+      AND nv2.macn = ct2.macn )
+
+--cách 2
+SELECT nv.manv, nv.honv + ' ' + nv.tennv AS hovatennv
+FROM NHAN_VIEN nv
+JOIN PHAN_CONG pc ON nv.manv = pc.manv
+
+EXCEPT
+
+SELECT nv.manv, nv.honv + ' ' + nv.tennv AS hovatennv
+FROM NHAN_VIEN nv
+JOIN PHAN_CONG pc ON nv.manv = pc.manv
+JOIN CONG_TRINH ct ON pc.mact = ct.mact
+WHERE nv.macn = ct.macn
+
+--s. Danh sách những nhân viên làm việc trong mọi công trình của công ty.
+--cách 1
+SELECT nv.manv, nv.honv + ' ' + nv.tennv AS hovatennv
+FROM NHAN_VIEN nv
+WHERE NOT EXISTS (
+    SELECT ct.mact
+    FROM CONG_TRINH ct
+    WHERE NOT EXISTS (
+        SELECT pc.mact
+        FROM PHAN_CONG pc
+        WHERE pc.mact = ct.mact AND pc.manv = nv.manv
+    )
+)
+--cách 2
+SELECT nv.manv, nv.honv + ' ' + nv.tennv AS hovatennv
+FROM NHAN_VIEN nv
+JOIN PHAN_CONG pc ON nv.manv = pc.manv
+GROUP BY nv.manv, nv.honv, nv.tennv
+HAVING COUNT(DISTINCT pc.mact) = (SELECT COUNT(*) FROM CONG_TRINH);
+--t. Danh sách những nhân viên được phân công tất cả công trình do chi nhánh ‘Chi nhánh 2’ phụ trách.
+SELECT nv.manv, nv.honv + ' ' + nv.tennv AS hovatennv
+FROM NHAN_VIEN nv
+JOIN PHAN_CONG pc ON nv.manv = pc.manv
+JOIN CONG_TRINH ct ON pc.mact = ct.mact
+JOIN CHI_NHANH cn ON ct.macn = cn.macn
+WHERE cn.tencn = N'Chi nhánh 2'
+GROUP BY nv.manv, nv.honv, nv.tennv
+HAVING COUNT(DISTINCT pc.mact) = (
+    SELECT COUNT(ct2.mact)
+    FROM CONG_TRINH ct2
+    JOIN CHI_NHANH cn2 ON ct2.macn = cn2.macn
+    WHERE cn2.tencn = N'Chi nhánh 2'
+);
+--u. Danh sách họ tên của những nhân viên tham gia tất cả các công trình do chi nhánh của nhân viên đó phụ trách.
+SELECT nv.manv, nv.honv + ' ' + nv.tennv AS hovatennv, cn.tencn
+FROM NHAN_VIEN nv
+JOIN CHI_NHANH cn ON nv.macn = cn.macn 
+JOIN PHAN_CONG pc ON nv.manv = pc.manv
+JOIN CONG_TRINH ct ON pc.mact = ct.mact
+WHERE ct.macn = nv.macn 
+GROUP BY nv.manv, nv.honv, nv.tennv, cn.tencn, nv.macn
+HAVING COUNT(DISTINCT pc.mact) = (
+    SELECT COUNT(*) 
+    FROM CONG_TRINH ct2 
+    WHERE ct2.macn = nv.macn
+);
+--v. Danh sách tên những chi nhánh đứng đầu về số lượng công trình phụ trách thi công (yêu cầu tương tự cho đứng cuối).
+SELECT 
+    cn.TenCN,
+    nv.HoNV + ' ' + nv.TenNV AS HoTenTruongCN,
+    (SELECT COUNT(*) FROM CONG_TRINH ct WHERE ct.macn = cn.macn) AS SoLuongCongTrinh
+FROM CHI_NHANH cn
+JOIN NHAN_VIEN nv ON cn.MaNVPtr = nv.MaNV
+ORDER BY SoLuongCongTrinh ;
+--w. Danh sách mã số và họ tên của những nhân viên đứng đầu về tổng số giờ làm việc/tuần trong các công trình (yêu cầu tương tự cho đứng cuối).
